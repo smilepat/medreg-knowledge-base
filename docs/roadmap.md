@@ -17,19 +17,22 @@
 
 ### M1-1. 추출 (extract.py)
 - [ ] `scripts/extract.py` 작성 — 샘플 1건 텍스트+표 추출
-- [ ] **표 보존 검증** (표가 Markdown으로 살아있는가)
-- [ ] 추출 도구 비교 메모 (Upstage / LlamaParse / Docling) → `docs/extraction-tools.md`
+- [x] **법령은 Open API XML 경로 채택** → `fetch_law.py` (조/항/호 위계가 구조화돼 옴, PDF 불필요)
+- [x] `extract.py` 표 보존 검증 (스모크 테스트 통과) — 외부 PDF/입찰공고용으로 보존
+- [ ] 추출 도구 비교 메모 (Upstage / LlamaParse / Docling) → `docs/extraction-tools.md` *(M2, 외부 PDF 등장 시)*
 
-### M1-2. 정제 + 구조화 (structure.py)
-- [ ] 머리말·꼬리말·페이지번호 제거
-- [ ] 법령 위계(조/항/호/목) 파싱 → 계층 트리
-- [ ] 출력: Markdown(계층 헤더) + JSON 메타데이터 이중 구조
+### M1-2. 구조화 (structure.py) ✅
+- [x] 장(章) 헤더 vs 조문 구분, 장 맥락 부착
+- [x] 법령 위계(조/항/호) 파싱 → 계층 트리 + 가지조(제N조의M)
+- [x] 출력: Markdown(계층 헤더) + JSON 이중 구조 → `processed/의료기기법_structured.{json,md}`
+- [x] 검증: 조문 91 / 항 302 / 호 282 / 장 8
 
-### M1-3. 청킹 + 메타데이터 (chunk.py)
-- [ ] 조항 단위 청킹 (contextual: 상위 조 제목·법령명 포함)
-- [ ] 메타데이터 필수 6필드 태깅 (스키마: `docs/metadata-schema.md`)
-- [ ] 정의어 사전 분리 / 교차참조 링크
-- [ ] **산출물: `samples/<규정명>_processed.json` 1건** ← M1의 핵심 검증물
+### M1-3. 청킹 + 메타데이터 (chunk.py) ✅
+- [x] 조항 단위 청킹 (contextual: `[법령명 제N조(제목)] 장` 맥락 줄 포함)
+- [x] 메타데이터 필수 6필드 + is_current/cross_refs/defined_terms 태깅
+- [x] 정의어 사전 분리(41개) / 교차참조 추출(청크 69개)
+- [x] **산출물: `samples/의료기기법_processed.json` (91 청크)** ← M1 핵심 검증물 ✅
+- [ ] (정밀화 보류) 「외부법」 바로 뒤 제N조를 내부참조로 오인하는 케이스 보정
 
 ### M1-4. 저장 + 검색 (embed.py / search.py)
 - [ ] Supabase pgvector 스키마 생성 (별 테이블)
