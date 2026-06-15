@@ -1,0 +1,30 @@
+# 원문 — 용량·저작권 이슈로 git 추적 제외 (.gitkeep만 추적)
+/raw/*
+!/raw/.gitkeep
+
+# 회사·입찰 기밀 자료는 절대 커밋 금지
+*_confidential*
+*기밀*
+/private/
+
+# 환경변수 (Supabase 키 등)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 대용량 중간 산출물 (필요 시 선별 추적)
+/processed/*_raw.md
+/processed/*_clean.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
