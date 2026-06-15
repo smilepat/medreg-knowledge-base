@@ -59,9 +59,37 @@ Phase 3  활용           보고서 인용 / 입찰 매칭          → docs/pip
 - **임베딩/생성:** 추후 확정 (한국어 규정 특성 고려)
 - **개발:** Claude Code (한 파일씩 단계적)
 
-## 빠른 시작
+## 빠른 시작 (M1 PoC — 의료기기법 기준)
+
+사전: `.env`에 `LAW_OC=<발급키>` (국가법령정보 Open API, open.law.go.kr에서 발급 + IP 등록)
 
 ```bash
-# (PoC 단계 — 스크립트 작성 후 갱신 예정)
-python scripts/extract.py raw/<sample>.pdf   # 1단계: 추출 (표 보존 검증)
+# 1) 원문 수집 (Open API → 구조화 XML)
+python scripts/fetch_law.py "의료기기법"
+
+# 2) 구조화 (XML → 위계 트리 JSON/MD)
+python scripts/structure.py "raw/의료기기법.xml"
+
+# 3) 청킹 + 메타데이터 (→ samples/의료기기법_processed.json)
+python scripts/chunk.py "processed/의료기기법_structured.json"
+
+# 4) 검색 (로컬: 키워드+글자유사도, 메타필터)
+python scripts/search.py "의료기기 등급분류 기준" --top 3
+
+# 5) 인용 답변 초안 (환각 방지 + 출처 인용 + HITL)
+python scripts/report.py "의료기기 제조업 허가는 누구에게 받나?"
 ```
+
+> Windows 콘솔에서 한글이 깨지면 `set PYTHONIOENCODING=utf-8` (PowerShell: `$env:PYTHONIOENCODING="utf-8"`) 후 실행.
+> 외부 PDF(입찰공고·회사자료)는 `python scripts/extract.py raw/<파일>.pdf` (표 Markdown 보존).
+
+## 파이프라인 스크립트
+
+| 스크립트 | 역할 |
+|----------|------|
+| `fetch_law.py` | 국가법령정보 Open API로 법령 전문(구조화 XML) 수집 |
+| `extract.py` | 외부 PDF 텍스트+표 추출 (표 Markdown 보존) |
+| `structure.py` | 법령 XML → 위계 트리(조/항/호) JSON + 사람용 MD |
+| `chunk.py` | 조 단위 contextual 청킹 + 메타데이터 + 정의어/교차참조 |
+| `search.py` | 로컬 검색(키워드+글자유사도) + 메타데이터 필터 |
+| `report.py` | 근거 인용 답변 초안 (환각 방지 / 버전 / HITL) |
