@@ -17,6 +17,7 @@ chunk.py — 파이프라인 3단계: 위계 트리 JSON → 최종 청크 + 메
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import sys
@@ -28,6 +29,20 @@ RE_INTERNAL_REF = re.compile(r"제\d+조(?:의\d+)?(?:제\d+항)?(?:제\d+호)?"
 RE_EXTERNAL_REF = re.compile(r"「[^」]{1,30}」(?:\s*제\d+조(?:의\d+)?)?")
 # 정의어: "의료기기"란 / "기술문서"란 / "안전관리종합계획"이라 한다
 RE_DEFINED = re.compile(r'[""]([^""]{1,40})[""]\s*(?:이?란|(?:이)?라\s*한다)')
+
+
+def version_status(effective_date: str, as_of: str) -> tuple[bool, str]:
+    """시행일과 기준일(as_of)을 비교해 (is_current, status) 를 계산한다.
+
+    - 시행일 ≤ 기준일  → 현행(is_current=True)
+    - 시행일 > 기준일  → 시행예정(is_current=False)  ← 미래 개정본
+    - 날짜 파싱 불가    → 확인필요(보수적으로 is_current=False)
+    """
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", effective_date or ""):
+        return False, "확인필요"
+    if effective_date <= as_of:
+        return True, "현행"
+    return False, "시행예정"
 
 
 def build_body(article: dict) -> str:
@@ -82,8 +97,8 @@ def extract_definitions(article: dict) -> list[dict]:
     return defs
 
 
-def make_chunks(data: dict) -> tuple[list[dict], list[dict]]:
-    """구조화 데이터 → (청크 리스트, 정의어 사전)."""
+def make_chunks(data: dict, as_of: str) -> tuple[list[dict], list[dict]]:
+    """구조화 데이터 → (청크 리스트, 정의어 사전). as_of=현행 판정 기준일(YYYY-MM-DD)."""
     meta = data["meta"]
     law = meta["law_name"]
     chunks: list[dict] = []
@@ -106,6 +121,9 @@ def make_chunks(data: dict) -> tuple[list[dict], list[dict]]:
         definitions.extend(art_defs)
         defined_terms = [d["term"] for d in art_defs]
 
+        eff = a["effective_date"] or meta["effective_date"]
+        is_current, status = version_status(eff, as_of)
+
         chunks.append({
             "chunk_id": f"{law}_{a['article']}",
             "text": text,
@@ -115,8 +133,9 @@ def make_chunks(data: dict) -> tuple[list[dict], list[dict]]:
                 "reg_type": meta["reg_type"],
                 "article": a["article"],
                 "chapter": chapter,
-                "effective_date": a["effective_date"] or meta["effective_date"],
-                "is_current": True,  # fetch_law.py가 현행(시행일 기준) 본문을 받았음
+                "effective_date": eff,
+                "is_current": is_current,  # 시행일 ≤ 기준일(as_of) 로 계산
+                "status": status,           # 현행 / 시행예정 / 확인필요
                 "applies_to": [],     # 본법은 일반 적용 — 하위 고시에서 품목·등급 채움
                 "source_url": f"https://www.law.go.kr/법령/{law}/{a['article']}",
                 "cross_refs": cross_refs,
@@ -131,6 +150,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="구조화 JSON → 최종 청크+메타데이터")
     parser.add_argument("json", help="입력 구조화 JSON (예: processed/의료기기법_structured.json)")
     parser.add_argument("--out-dir", default="samples", help="출력 폴더 (기본: samples)")
+    parser.add_argument(
+        "--as-of",
+        default=datetime.date.today().isoformat(),
+        help="현행 판정 기준일 YYYY-MM-DD (기본: 오늘). 시행일 ≤ 기준일이면 현행",
+    )
     args = parser.parse_args()
 
     in_path = Path(args.json)
@@ -141,7 +165,7 @@ def main() -> None:
     if "meta" not in data or "articles" not in data:
         sys.exit("[오류] structure.py 산출 형식이 아닙니다(meta/articles 필요).")
 
-    chunks, definitions = make_chunks(data)
+    chunks, definitions = make_chunks(data, args.as_of)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -159,9 +183,12 @@ def main() -> None:
 
     # 요약(검증용)
     n_refs = sum(1 for c in chunks if c["metadata"]["cross_refs"])
+    n_current = sum(1 for c in chunks if c["metadata"]["is_current"])
+    n_future = sum(1 for c in chunks if c["metadata"]["status"] == "시행예정")
     uniq_terms = sorted({d["term"] for d in definitions})
     print(f"[완료] {out_path}")
     print(f"  - 청크: {len(chunks)}개 (조 단위)")
+    print(f"  - 버전(기준일 {args.as_of}): 현행 {n_current} / 시행예정 {n_future}")
     print(f"  - 교차참조 있는 청크: {n_refs}개")
     print(f"  - 정의어: {len(uniq_terms)}개 → {', '.join(uniq_terms[:8])}{' ...' if len(uniq_terms) > 8 else ''}")
     print("\n다음 단계: embed.py (Supabase pgvector 적재) → search.py (하이브리드 검색)")

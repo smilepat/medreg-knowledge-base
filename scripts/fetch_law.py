@@ -102,9 +102,15 @@ def search_law(oc: str, query: str) -> tuple[str, str]:
     return mst, name
 
 
-def fetch_body(oc: str, mst: str) -> bytes:
-    """법령 본문(구조화 XML)을 받아온다."""
+def fetch_body(oc: str, mst: str, ef_yd: str | None = None) -> bytes:
+    """법령 본문(구조화 XML)을 받아온다.
+
+    ef_yd(시행일, YYYYMMDD)를 주면 해당 시행일 버전을 받는다(미지정 시 기본 버전).
+    소스마다 기본 버전이 다를 수 있어(검증: legalize-kr는 최신 공포본) 버전을 명시 권장.
+    """
     url = f"{DRF}/lawService.do?OC={oc}&target=law&MST={mst}&type=XML"
+    if ef_yd:
+        url += f"&efYd={ef_yd}"
     raw = _get(url)
     _check_auth(raw)
     return raw
@@ -132,6 +138,7 @@ def main() -> None:
     parser.add_argument("query", help="법령명 (예: 의료기기법)")
     parser.add_argument("--oc", default=None, help="OC 키 (기본: .env 또는 환경변수 LAW_OC)")
     parser.add_argument("--out-dir", default="raw", help="저장 폴더 (기본: raw)")
+    parser.add_argument("--ef-yd", default=None, help="시행일 YYYYMMDD (특정 버전 지정, 미지정 시 기본 버전)")
     args = parser.parse_args()
 
     # .env 로드 후 OC 결정 (인자 > 환경변수/.env)
@@ -149,8 +156,8 @@ def main() -> None:
     mst, name = search_law(args.oc, args.query)
     print(f"      → 매칭: {name} (MST={mst})")
 
-    print("[2/3] 본문 수신 (구조화 XML)")
-    raw = fetch_body(args.oc, mst)
+    print("[2/3] 본문 수신 (구조화 XML)" + (f" / 시행일 {args.ef_yd}" if args.ef_yd else ""))
+    raw = fetch_body(args.oc, mst, args.ef_yd)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
