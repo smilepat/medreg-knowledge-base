@@ -31,6 +31,8 @@ Phase 2  저장 + 검색    pgvector + 하이브리드 검색       → docs/pip
 Phase 3  활용           보고서 인용 / 입찰 매칭          → docs/pipeline-architecture.md
 ```
 
+**문제 정의부터 가공까지 한눈에:** [docs/overview.md](docs/overview.md) (① 문제 정의 → ② 기존 데이터 검색 → ③ 법령 가져오기 → ④ 처리·저장·가공)
+
 전체 전략은 [STRATEGY.md](STRATEGY.md), 단계별 실행 계획은 [docs/roadmap.md](docs/roadmap.md) 참조.
 
 ## 3대 안전장치 (전 단계 관통)
