@@ -35,6 +35,14 @@ from pathlib import Path
 DRF = "https://www.law.go.kr/DRF"
 UA = "Mozilla/5.0 (medreg-knowledge-base fetch_law.py)"
 
+# 수집 대상별 API 필드 매핑
+#  - law    : 법·시행령·시행규칙 (검색결과 <law>, 본문 MST 파라미터)
+#  - admrul : 행정규칙=고시·훈령·예규 (검색결과 <admrul>, 본문 ID 파라미터)
+TARGETS = {
+    "law": {"item": "law", "name": "법령명한글", "id": "법령일련번호", "param": "MST"},
+    "admrul": {"item": "admrul", "name": "행정규칙명", "id": "행정규칙일련번호", "param": "ID"},
+}
+
 
 def _load_dotenv() -> None:
     """프로젝트 루트의 .env를 읽어 환경변수에 주입한다(외부 라이브러리 없이).
@@ -72,43 +80,43 @@ def _check_auth(raw: bytes) -> None:
         )
 
 
-def search_law(oc: str, query: str) -> tuple[str, str]:
-    """법령명으로 검색해 (법령일련번호 MST, 법령명) 을 반환한다.
+def search_law(oc: str, query: str, target: str) -> tuple[str, str]:
+    """법령/행정규칙명으로 검색해 (일련번호, 정식명칭) 을 반환한다.
 
-    정확히 일치하는 현행 법령을 우선 선택한다.
+    정확히 일치하는 항목을 우선 선택한다.
     """
+    cfg = TARGETS[target]
     q = urllib.parse.quote(query)
-    url = f"{DRF}/lawSearch.do?OC={oc}&target=law&type=XML&display=20&query={q}"
+    url = f"{DRF}/lawSearch.do?OC={oc}&target={target}&type=XML&display=20&query={q}"
     raw = _get(url)
     _check_auth(raw)
 
     root = ET.fromstring(raw)
-    laws = root.findall("law")
-    if not laws:
-        sys.exit(f"[오류] 검색 결과 없음: {query}")
+    items = root.findall(cfg["item"])
+    if not items:
+        sys.exit(f"[오류] 검색 결과 없음: {query} (target={target})")
 
-    # 정확히 일치하는 법령명 우선, 없으면 첫 결과
     def name_of(el):
-        n = el.findtext("법령명한글") or ""
-        return n.strip()
+        return (el.findtext(cfg["name"]) or "").strip()
 
-    exact = [el for el in laws if name_of(el) == query]
-    chosen = exact[0] if exact else laws[0]
+    exact = [el for el in items if name_of(el) == query]
+    chosen = exact[0] if exact else items[0]
 
-    mst = (chosen.findtext("법령일련번호") or "").strip()
+    ident = (chosen.findtext(cfg["id"]) or "").strip()
     name = name_of(chosen)
-    if not mst:
-        sys.exit("[오류] 법령일련번호(MST)를 찾지 못했습니다.")
-    return mst, name
+    if not ident:
+        sys.exit(f"[오류] 일련번호({cfg['id']})를 찾지 못했습니다.")
+    return ident, name
 
 
-def fetch_body(oc: str, mst: str, ef_yd: str | None = None) -> bytes:
-    """법령 본문(구조화 XML)을 받아온다.
+def fetch_body(oc: str, ident: str, target: str, ef_yd: str | None = None) -> bytes:
+    """법령/행정규칙 본문(구조화 XML)을 받아온다.
 
     ef_yd(시행일, YYYYMMDD)를 주면 해당 시행일 버전을 받는다(미지정 시 기본 버전).
     소스마다 기본 버전이 다를 수 있어(검증: legalize-kr는 최신 공포본) 버전을 명시 권장.
     """
-    url = f"{DRF}/lawService.do?OC={oc}&target=law&MST={mst}&type=XML"
+    cfg = TARGETS[target]
+    url = f"{DRF}/lawService.do?OC={oc}&target={target}&{cfg['param']}={ident}&type=XML"
     if ef_yd:
         url += f"&efYd={ef_yd}"
     raw = _get(url)
@@ -117,17 +125,21 @@ def fetch_body(oc: str, mst: str, ef_yd: str | None = None) -> bytes:
 
 
 def summarize(raw: bytes) -> dict:
-    """본문 XML에서 핵심 메타와 조문 수를 뽑아 요약한다."""
+    """본문 XML에서 핵심 메타와 조문 수를 뽑아 요약한다(법령/행정규칙 공용)."""
     info = {"법령명": "?", "시행일자": "?", "공포번호": "?", "조문수": 0}
     try:
         root = ET.fromstring(raw)
-        basic = root.find("기본정보")
+        # 법령: <기본정보>, 행정규칙: <행정규칙기본정보>
+        basic = root.find("기본정보") or root.find("행정규칙기본정보")
         if basic is not None:
-            info["법령명"] = (basic.findtext("법령명_한글") or basic.findtext("법령명한글") or "?").strip()
+            info["법령명"] = (
+                basic.findtext("법령명_한글") or basic.findtext("법령명한글")
+                or basic.findtext("행정규칙명") or "?"
+            ).strip()
             info["시행일자"] = (basic.findtext("시행일자") or "?").strip()
-            info["공포번호"] = (basic.findtext("공포번호") or "?").strip()
-        # 조문단위 개수
-        info["조문수"] = len(root.findall(".//조문단위"))
+            info["공포번호"] = (basic.findtext("공포번호") or basic.findtext("발령번호") or "?").strip()
+        # 법령: 조문단위, 행정규칙: 조문내용
+        info["조문수"] = len(root.findall(".//조문단위")) or len(root.findall("조문내용"))
     except ET.ParseError:
         pass
     return info
@@ -135,8 +147,10 @@ def summarize(raw: bytes) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="국가법령정보 Open API로 법령 전문 수집")
-    parser.add_argument("query", help="법령명 (예: 의료기기법)")
+    parser.add_argument("query", help="법령/행정규칙명 (예: 의료기기법, 의료기기 제조 및 품질관리 기준)")
     parser.add_argument("--oc", default=None, help="OC 키 (기본: .env 또는 환경변수 LAW_OC)")
+    parser.add_argument("--target", default="law", choices=list(TARGETS),
+                        help="law=법/시행령/시행규칙(기본), admrul=고시·훈령·예규(행정규칙)")
     parser.add_argument("--out-dir", default="raw", help="저장 폴더 (기본: raw)")
     parser.add_argument("--ef-yd", default=None, help="시행일 YYYYMMDD (특정 버전 지정, 미지정 시 기본 버전)")
     args = parser.parse_args()
@@ -152,12 +166,12 @@ def main() -> None:
             "  발급: https://open.law.go.kr (OPEN API 활용신청)"
         )
 
-    print(f"[1/3] 검색: {args.query}")
-    mst, name = search_law(args.oc, args.query)
-    print(f"      → 매칭: {name} (MST={mst})")
+    print(f"[1/3] 검색: {args.query} (target={args.target})")
+    ident, name = search_law(args.oc, args.query, args.target)
+    print(f"      → 매칭: {name} (ID={ident})")
 
     print("[2/3] 본문 수신 (구조화 XML)" + (f" / 시행일 {args.ef_yd}" if args.ef_yd else ""))
-    raw = fetch_body(args.oc, mst, args.ef_yd)
+    raw = fetch_body(args.oc, ident, args.target, args.ef_yd)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
