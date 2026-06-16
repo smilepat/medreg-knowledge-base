@@ -6,6 +6,8 @@
 *_confidential*
 *기밀*
 /private/
+# 회사 역량 프로필(실데이터) — .sample 만 추적
+/examples/company-profile.md
 
 # 환경변수 (Supabase 키 등)
 .env
