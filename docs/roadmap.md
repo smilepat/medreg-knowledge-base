@@ -58,10 +58,12 @@
 - [ ] 현행 + 시행예정 동시 적재 → 버전 간 자동 개정 경고
 - [ ] 추출 도구 최종 채택(외부 PDF/고시 별표 등장 시) / 배치 파이프라인화
 
-## 🔎 Milestone 2.5 — 내 문서 정합성 점검 (check.py)
-- [x] `check.py`: 문서 항목별 KB 대조 점검표(근거있음/인용확인/시행예정/근거없음)
-- [x] 시연: `examples/sample-report-draft.md` → 오인용(제200조)·근거 정확 적발
-- [ ] 키워드 오탐 보완(의미검색 임베딩) + LLM 의미적 충돌 판정 부착
+## 🔎 Milestone 2.5 — 내 문서 정합성 점검 (check.py) ✅
+- [x] `check.py`: 문서 항목별 KB 대조 점검표
+- [x] **의미검색 통합**(`retriever.py` pgvector) — report.py·check.py 공용
+- [x] **LLM 판정 계층**(`judge.py`, Gemini 2.5-flash) — "조항이 주장을 실제 뒷받침하나" 판정
+- [x] 시연: 오인용(제200조)·자기참조 오탐(건강보험수가)·틀린인용(제15조=수입) 적발
+- [ ] (확장) 인접법(국민건강보험법 등) 적재로 라우팅 개선 / report.py 자연어 요약
 
 ## 🏗️ Milestone 3 — 입찰 컴플라이언스 매칭
 - [ ] 공고문 요구사항 추출 → requirement matrix
