@@ -92,7 +92,12 @@ python scripts/report.py "의료기기 제조업 허가는 누구에게 받나?"
 | `fetch_law.py` | 국가법령정보 Open API로 법령 전문(구조화 XML) 수집 |
 | `extract.py` | 외부 PDF 텍스트+표 추출 (표 Markdown 보존) |
 | `structure.py` | 법령 XML → 위계 트리(조/항/호) JSON + 사람용 MD |
-| `chunk.py` | 조 단위 contextual 청킹 + 메타데이터 + 정의어/교차참조 |
-| `search.py` | 로컬 검색(키워드+글자유사도) + 메타데이터 필터 |
-| `report.py` | 근거 인용 답변 초안 (환각 방지 / 버전 / HITL) |
-| `check.py` | 내 문서 ↔ 규정 정합성 점검표 (근거있음/인용확인/시행예정/근거없음) |
+| `chunk.py` | 조 단위 contextual 청킹 + 메타데이터(버전 is_current/status) + 정의어/교차참조 |
+| `embed.py` | 청크 → Gemini 임베딩 → Supabase pgvector 적재 |
+| `retriever.py` | 공용 하이브리드 검색(pgvector 의미 + 조문 부스트 + 현행필터) |
+| `search.py` | 로컬 검색(키워드+글자유사도, 오프라인 폴백) |
+| `search_pg.py` | 의미검색(pgvector 코사인 유사도) |
+| `judge.py` | LLM 판정(Gemini): 조항이 주장을 실제 뒷받침/모순/무관인지 |
+| `report.py` | 근거 인용 답변 초안 (의미검색 + 환각 방지 / 버전 / HITL) |
+| `check.py` | 내 문서 ↔ 규정 정합성 점검표 (검색 + 인용검증 + LLM 판정) |
+| `bid_matrix.py` | 입찰 공고문 → 요구사항 매트릭스(유형·규정근거 매핑, M3) |
