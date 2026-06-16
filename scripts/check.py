@@ -12,12 +12,15 @@ check.py — 내 문서 ↔ 규정 정합성 점검표 (pgvector 의미검색판
   의미검색이라도 인접 주제(예: 의료기기 책임보험 ↔ 건강보험)는 중간 유사도가 나올 수 있어,
   저신뢰 구간을 별도 표시한다.
 
-판정 종류:
-  ✅ 근거있음       : 의미검색 유사도 충분(≥SIM_OK)
-  📌 인용확인(현행)  : 문서가 명시한 조(제N조)가 KB에 있고 현행
-  ⚠️ 시행예정       : 문서가 명시한 조가 미래 시행본 → 현행 인용으로 부적절할 수 있음
-  ⚠️ 저신뢰         : 유사도 중간(범위 밖/인접주제 의심) → 적합성 신중 확인
-  ⚠️ 근거없음       : 명시 조가 KB에 없음(오인용/미적재) 또는 유사도 낮음
+판정 종류(LLM 판정 ON 기준):
+  ✅ 근거있음        : 조항이 주장을 직접 뒷받침(LLM '지지')
+  ◐ 부분지지        : 일부/조건부 뒷받침(LLM '부분지지')
+  ⚠️ 충돌(모순)     : 조항이 주장과 반대/충돌(LLM '모순')
+  ⚠️ 근거없음(무관)  : 조항이 주장과 무관(다른 법 소관 등, LLM '무관')
+  ⚠️ 시행예정        : 뒷받침되나 미래 시행본 → 현행 인용으로 부적절
+  ⚠️ 확인필요        : 조항만으로 판단 근거 부족(LLM '불충분')
+  ⚠️ 근거없음        : 명시 조가 KB에 없음(오인용) 또는 검색 유사도 낮음
+  (--no-llm 시: 검색 근접도 기반 ✅근거있음/⚠️저신뢰/⚠️시행예정/⚠️근거없음)
 
 사전: .env(SUPABASE_DB_URL + GEMINI_API_KEY), embed.py로 medreg.chunks 적재됨.
 
@@ -34,13 +37,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import retriever  # noqa: E402
+import judge  # noqa: E402
 
 try:
     sys.stdout.reconfigure(errors="replace")
 except Exception:
     pass
 
-SIM_OK = 0.65   # 이상이면 근거있음
+SIM_OK = 0.65   # 이상이면 근거있음(검색 전용 모드)
 SIM_LOW = 0.55  # 이 값~SIM_OK 는 저신뢰, 미만은 근거없음
 
 
@@ -63,40 +67,54 @@ def detect_law(claim: str, laws: list[str]) -> str | None:
     return None
 
 
-def assess(claim: str, laws: list[str], current_only: bool) -> dict:
-    """한 항목을 점검해 판정/근거를 만든다."""
+def assess(claim: str, laws: list[str], current_only: bool, use_llm: bool) -> dict:
+    """한 항목을 점검: 후보 조항 확보 → (LLM이면) 지지여부 판정."""
     q_articles = retriever.RE_ARTICLE.findall(claim)
     named_law = detect_law(claim, laws)
 
-    # (1) 특정 조를 명시 인용 → 인용 정확성·버전 검증
+    # 1) 후보 조항 확보 (명시 인용 우선, 없으면 의미검색)
+    sim = None
     if q_articles:
-        for qa in q_articles:
-            hit = retriever.find_article(qa, named_law)
-            if hit is None:
-                where = f"{named_law} " if named_law else ""
-                return {"verdict": "⚠️ 근거없음",
-                        "basis": f"{where}{qa} — KB에 없음(오인용/미적재 가능)"}
-            m = hit["metadata"]
-            if not m.get("is_current", True):
-                return {"verdict": "⚠️ 시행예정",
-                        "basis": f"{m['law_name']} {qa} {m.get('status')}(시행 {m['effective_date']})"}
-            return {"verdict": "📌 인용확인(현행)",
-                    "basis": f"{m['law_name']} {qa} 현행(시행 {m['effective_date']})"}
+        prov = retriever.find_article(q_articles[0], named_law)
+        if prov is None:
+            where = f"{named_law} " if named_law else ""
+            return {"verdict": "⚠️ 근거없음",
+                    "basis": f"{where}{q_articles[0]} — KB에 없음(오인용/미적재 가능)"}
+    else:
+        res = retriever.hybrid_search(claim, top_k=1, current_only=current_only)
+        if not res or res[0]["sim"] < SIM_LOW:
+            sim = res[0]["sim"] if res else 0.0
+            return {"verdict": "⚠️ 근거없음", "basis": f"유사도 {sim:.2f} 낮음 → 확인 필요"}
+        prov = res[0]
+        sim = prov["sim"]
 
-    # (2) 명시 인용 없음 → 의미검색
-    res = retriever.hybrid_search(claim, top_k=1, current_only=current_only)
-    if not res or res[0]["sim"] < SIM_LOW:
-        sim = res[0]["sim"] if res else 0.0
-        return {"verdict": "⚠️ 근거없음", "basis": f"유사도 {sim:.2f} 낮음 → 확인 필요"}
+    m = prov["metadata"]
+    ver = f"시행 {m['effective_date']}" + (f", 유사도 {sim:.2f}" if sim is not None else "")
+    future = not m.get("is_current", True)
+    tag = f"{m['law_name']} {m['article']} ({ver})"
 
-    top = res[0]
-    m = top["metadata"]
-    sim = top["sim"]
-    base = f"{m['law_name']} {m['article']} (시행 {m['effective_date']}, 유사도 {sim:.2f})"
-    if not m.get("is_current", True):
+    # 2) 검색 전용(LLM 끔)
+    if not use_llm:
+        if future:
+            return {"verdict": "⚠️ 시행예정", "basis": tag}
+        if sim is not None and sim < SIM_OK:
+            return {"verdict": "⚠️ 저신뢰", "basis": tag + " — 범위밖/인접주제 의심"}
+        return {"verdict": "✅ 근거있음", "basis": tag}
+
+    # 3) LLM 판정: 이 조항이 주장을 실제 뒷받침하는가
+    j = judge.judge(claim, prov["text"], prov["context_header"])
+    v, reason = j["verdict"], j["reason"]
+    base = f"{tag} — {reason}"
+    if v == "모순":
+        return {"verdict": "⚠️ 충돌(모순)", "basis": base}
+    if v == "무관":
+        return {"verdict": "⚠️ 근거없음(무관)", "basis": base}
+    if v == "불충분":
+        return {"verdict": "⚠️ 확인필요", "basis": base}
+    if future:  # 지지/부분지지지만 미래 시행본
         return {"verdict": "⚠️ 시행예정", "basis": base}
-    if sim < SIM_OK:
-        return {"verdict": "⚠️ 저신뢰", "basis": base + " — 범위 밖/인접주제 의심"}
+    if v == "부분지지":
+        return {"verdict": "◐ 부분지지", "basis": base}
     return {"verdict": "✅ 근거있음", "basis": base}
 
 
@@ -104,6 +122,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="내 문서 ↔ 규정 정합성 점검표(pgvector)")
     parser.add_argument("doc", help="점검할 문서 (md/txt)")
     parser.add_argument("--current-only", action="store_true", help="현행만 근거로")
+    parser.add_argument("--no-llm", action="store_true", help="LLM 판정 끄기(검색 전용)")
     parser.add_argument("--out", help="점검표 저장 경로(.md). 미지정 시 화면 출력만")
     args = parser.parse_args()
 
@@ -115,14 +134,18 @@ def main() -> None:
     if not claims:
         sys.exit("[오류] 점검할 항목이 없습니다(문서가 비었거나 제목만 있음).")
 
+    use_llm = not args.no_llm
     laws = retriever.all_law_names()
-    rows = [assess(c, laws, args.current_only) for c in claims]
+    print(f"점검 중… 항목 {len(claims)}개 / LLM 판정 {'ON(gemini-2.5-flash)' if use_llm else 'OFF'}", file=sys.stderr)
+    rows = [assess(c, laws, args.current_only, use_llm) for c in claims]
 
+    mode = "LLM 지지여부 판정" if use_llm else "검색 근접도(LLM 끔)"
     lines = [
         f"# 규정 정합성 점검표 — {doc_path.name}",
         "",
         f"> 기준선(KB, Supabase pgvector): {', '.join(sorted(laws))}",
-        "> ⚠️ 의미적 충돌 최종판정은 HITL(사람) 또는 LLM 단계. 본 표는 근거·인용·버전·근접도 점검.",
+        f"> 판정 방식: {mode}. 조항 텍스트만 근거로 판정(외부지식 금지).",
+        "> ⚠️ 최종 책임 판단은 HITL(담당자) 몫. 본 표는 1차 점검.",
         "",
         "| # | 항목 | 판정 | 근거 |",
         "| - | ---- | ---- | ---- |",
