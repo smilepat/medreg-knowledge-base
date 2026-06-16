@@ -114,7 +114,7 @@ def main() -> None:
     weak = sum(1 for _, _, b in rows if b.startswith("참고"))
     out_n = sum(1 for _, _, b in rows if b.startswith("규정 외"))
     lines += ["", f"> 규정 근거 확실 {mapped}건 / 저신뢰 {weak}건 / 규정 외 {out_n}건",
-              "> 규정 외=조달·계약 규정(나라장터/국가계약법) KB 미적재 → Tier4 적재 시 개선."]
+              "> 충족 여부는 회사 제품·실적 자료 대조로 확정(다음 단계). 근거 적합성은 LLM 판정으로 정밀화 가능."]
 
     out = "\n".join(lines)
     print(out)
