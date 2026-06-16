@@ -29,12 +29,13 @@ try:
 except Exception:
     pass
 
-# 같은 폴더의 search.py 재사용(검색 로직 단일화)
+# 공용 검색 모듈(pgvector 의미검색) 재사용
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from search import RE_ARTICLE, load_chunks, score_chunk, tokenize  # noqa: E402
+import retriever  # noqa: E402
 
-MIN_SCORE = 3.0   # 이 점수 미만이면 근거 불충분 → "확인 불가"
-TOP_K = 3         # 답변 근거로 제시할 최대 조항 수
+MIN_SIM = 0.50   # 코사인 유사도 이 값 미만이면 근거 불충분 → "확인 불가"
+LOW_CONF = 0.65  # 이 값 미만이면 표시하되 '저신뢰(범위 밖 의심)' 경고
+TOP_K = 3        # 답변 근거로 제시할 최대 조항 수
 
 
 def citation(meta: dict) -> str:
@@ -45,40 +46,34 @@ def citation(meta: dict) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="질문 → 근거 인용 답변 초안(환각 방지)")
     parser.add_argument("question", help="질문")
-    parser.add_argument("--samples-dir", default="samples")
     parser.add_argument("--current-only", action="store_true", help="현행만 근거로")
     args = parser.parse_args()
 
-    chunks = load_chunks(Path(args.samples_dir))
-    pool = [c for c in chunks if c["metadata"].get("is_current")] if args.current_only else chunks
-
-    tokens = tokenize(args.question)
-    q_articles = RE_ARTICLE.findall(args.question)
-
-    scored = []
-    for c in pool:
-        s, why = score_chunk(args.question, tokens, q_articles, c)
-        if s > 0:
-            scored.append((s, c))
-    scored.sort(key=lambda x: x[0], reverse=True)
+    results = retriever.hybrid_search(args.question, top_k=TOP_K, current_only=args.current_only)
 
     print(f"질문: {args.question}\n" + "=" * 60)
 
-    # 안전장치 1: 근거 불충분 → 확인 불가
-    if not scored or scored[0][0] < MIN_SCORE:
+    # 안전장치 1: 근거 불충분(의미적으로 멂) → 확인 불가
+    if not results or results[0]["sim"] < MIN_SIM:
         print("\n⚠️ 확인 불가 — 보유한 규정에서 충분한 근거를 찾지 못했습니다.")
         print("   (관련 규정이 아직 적재되지 않았거나, 질문 범위 밖일 수 있습니다.)")
-        if scored:
-            top = scored[0][1]["metadata"]
-            print(f"   참고로 가장 가까운 후보: {citation(top)} (점수 {scored[0][0]:.1f}, 임계 {MIN_SCORE})")
+        if results:
+            top = results[0]
+            print(f"   참고로 가장 가까운 후보: {citation(top['metadata'])} "
+                  f"(유사도 {top['sim']:.2f}, 임계 {MIN_SIM})")
         return
 
+    # 저신뢰 경고: 최상위 유사도가 애매하면(범위 밖 의심) 신중 검토 안내
+    if results[0]["sim"] < LOW_CONF:
+        print(f"\n⚠️ 주의: 최상위 유사도 {results[0]['sim']:.2f}(<{LOW_CONF})로 낮습니다.")
+        print("   질문이 보유 규정의 범위 밖이거나 인접 주제일 수 있으니 적합성을 특히 신중히 확인하세요.")
+
     # 근거 제시(인용 의무)
-    print("\n■ 관련 규정 (근거):\n")
-    for rank, (s, c) in enumerate(scored[:TOP_K], start=1):
+    print("\n■ 관련 규정 (근거, 의미검색 유사도순):\n")
+    for rank, c in enumerate(results, start=1):
         m = c["metadata"]
         body = c["text"].split("\n", 1)[-1].strip()
-        print(f"{rank}. {citation(m)}  「{c['context_header']}」")
+        print(f"{rank}. {citation(m)}  「{c['context_header']}」  (유사도 {c['sim']:.2f})")
         print(f"   {body[:220]}{'…' if len(body) > 220 else ''}")
         if m.get("cross_refs"):
             print(f"   ↳ 함께 볼 참조: {', '.join(m['cross_refs'][:5])}")
