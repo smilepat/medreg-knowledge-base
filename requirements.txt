@@ -1,0 +1,9 @@
+# medreg-knowledge-base 파이썬 의존성
+# 설치: python -m pip install -r requirements.txt
+
+pdfplumber>=0.11        # extract.py — 외부 PDF 텍스트/표 추출
+psycopg2-binary>=2.9    # embed.py / search_pg.py — Supabase(PostgreSQL) 연결
+google-genai>=0.3       # embed.py / search_pg.py — Gemini 임베딩(gemini-embedding-001)
+
+# 선택(테스트 픽스처 PDF 생성 시에만)
+# reportlab>=4
