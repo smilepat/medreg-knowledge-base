@@ -149,8 +149,58 @@ def to_markdown(meta: dict, articles: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ── 행정규칙(고시·훈령·예규) 분기 ──────────────────────────────
+# 행정규칙 XML은 법령과 다름: root <AdmRulService>, <행정규칙기본정보>,
+# 조문은 <조문내용>(평탄 텍스트, 항/호 inline). → 조문내용 1개 = 조 1개로 본다.
+
+def parse_basic_admrul(root: ET.Element) -> dict:
+    b = root.find("행정규칙기본정보")
+    if b is None:
+        sys.exit("[오류] 행정규칙기본정보 없음 — 올바른 행정규칙 XML이 아닙니다.")
+    return {
+        "law_name": txt(b, "행정규칙명"),
+        "law_id": txt(b, "행정규칙ID"),
+        "reg_type": txt(b, "행정규칙종류") or "고시",  # 고시/훈령/예규
+        "law_type_raw": txt(b, "행정규칙종류"),
+        "effective_date": _fmt_date(txt(b, "시행일자")),
+        "promulgation_no": txt(b, "발령번호"),
+        "promulgation_date": _fmt_date(txt(b, "발령일자")),
+        "ministry": txt(b, "소관부처명"),
+        "amend_type": "",
+    }
+
+
+def parse_articles_admrul(root: ET.Element) -> list[dict]:
+    """<조문내용> 평탄 텍스트를 조 단위 조문으로 파싱(장 헤더 분리)."""
+    articles: list[dict] = []
+    current_chapter = ""
+    for j in root.findall("조문내용"):
+        text = (j.text or "").strip()
+        if not text:
+            continue
+        first = text.split("\n", 1)[0].strip()
+        art_m = re.match(r"^(제\d+조(?:의\d+)?)", first)
+        chap_m = re.match(r"^(제\d+장)\s*(.*)$", first)
+        if chap_m and not art_m:
+            current_chapter = first  # 장 헤더
+            continue
+        if not art_m:
+            continue  # 조 번호 없는 블록(서문 등)은 건너뜀
+        title_m = re.match(r"^제\d+조(?:의\d+)?\s*\(([^)]*)\)", first)
+        articles.append({
+            "article": art_m.group(1),
+            "title": title_m.group(1).strip() if title_m else "",
+            "chapter": current_chapter,
+            "effective_date": "",  # 행정규칙은 조별 시행일 없음 → meta 시행일 사용
+            "head": text,          # 항/호가 inline → 본문 전체
+            "hang": [],
+            "ref_material": "",
+        })
+    return articles
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="법령 XML → 위계 트리 JSON + Markdown")
+    parser = argparse.ArgumentParser(description="법령/행정규칙 XML → 위계 트리 JSON + Markdown")
     parser.add_argument("xml", help="입력 XML (예: raw/의료기기법.xml)")
     parser.add_argument("--out-dir", default="processed", help="출력 폴더 (기본: processed)")
     args = parser.parse_args()
@@ -164,8 +214,13 @@ def main() -> None:
     except ET.ParseError as e:
         sys.exit(f"[오류] XML 파싱 실패: {e}")
 
-    meta = parse_basic(root)
-    articles = parse_articles(root)
+    # 법령(<법령>) vs 행정규칙(<AdmRulService>) 분기
+    if root.tag == "AdmRulService" or root.find("행정규칙기본정보") is not None:
+        meta = parse_basic_admrul(root)
+        articles = parse_articles_admrul(root)
+    else:
+        meta = parse_basic(root)
+        articles = parse_articles(root)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
