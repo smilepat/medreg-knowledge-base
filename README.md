@@ -31,6 +31,7 @@ Phase 2  저장 + 검색    pgvector + 하이브리드 검색       → docs/pip
 Phase 3  활용           보고서 인용 / 입찰 매칭          → docs/pipeline-architecture.md
 ```
 
+**왕초보 설명서(클릭 위치부터):** [docs/초보자-사용설명서.md](docs/초보자-사용설명서.md)
 **사용 가이드(비개발자용):** [docs/USER-GUIDE.md](docs/USER-GUIDE.md) (보고서 근거찾기 · 문서 점검 · 입찰 대조)
 **다른 PC에서 시작:** [SETUP.md](SETUP.md) (클론 → `pip install` → `.env` → `setup_check.py`)
 **문제 정의부터 가공까지 한눈에:** [docs/overview.md](docs/overview.md) (① 문제 정의 → ② 기존 데이터 검색 → ③ 법령 가져오기 → ④ 처리·저장·가공)
