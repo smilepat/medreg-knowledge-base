@@ -32,15 +32,22 @@ _conn = None
 
 
 def _load_env() -> dict:
+    """환경변수(클라우드) + .env 파일(로컬)을 병합. .env 가 환경변수를 덮어씀.
+
+    - 로컬: .env 파일에서 읽음
+    - 클라우드(HF Spaces 등): .env 없이 OS 환경변수(Secrets)에서 읽음
+    """
     global _env
     if _env is None:
-        _env = {}
+        import os
+        _env = dict(os.environ)  # 클라우드 Secrets 우선 확보
         p = Path(__file__).resolve().parent.parent / ".env"
-        for line in p.read_text(encoding="utf-8").splitlines():
-            s = line.strip()
-            if s and not s.startswith("#") and "=" in s:
-                k, _, v = s.partition("=")
-                _env[k.strip()] = v.strip()
+        if p.exists():
+            for line in p.read_text(encoding="utf-8").splitlines():
+                s = line.strip()
+                if s and not s.startswith("#") and "=" in s:
+                    k, _, v = s.partition("=")
+                    _env[k.strip()] = v.strip()  # 로컬 .env 가 우선
     return _env
 
 
