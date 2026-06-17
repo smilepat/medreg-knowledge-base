@@ -52,14 +52,28 @@ docker run -p 8501:8501 \
   medreg-app
 ```
 
-## 3. 옵션 C — 사내망 공유(배포 없이)
+## 3. 옵션 C — 사내망 공유 (배포 없이, 권장 · 새 서비스 0개)
 
-같은 사무실 네트워크면 호스팅 없이 충분할 수 있음:
-```bash
-python -m streamlit run app.py --server.address 0.0.0.0
-```
-→ 실행 PC의 `Network URL`(예: http://172.30.1.81:8501)을 같은 망의 동료가 접속.
-(이 PC가 켜져 있어야 하고, 외부 인터넷에선 접속 불가 → 기밀 측면에서 안전한 편)
+같은 사무실 네트워크면 호스팅 없이 충분. **다른 PC에서도** 아래 순서면 됩니다.
+
+### 다른 PC에서 한 번만 준비
+1. `git clone https://github.com/smilepat/medreg-knowledge-base.git`
+2. `python -m pip install -r requirements.txt`
+3. `.env` 생성(키 입력) — [SETUP.md](SETUP.md) 참고. 사내 공유면 `APP_PASSWORD`도 설정 권장.
+4. `python scripts/setup_check.py` 로 ✅ 확인
+
+### 실행 (매번)
+- **Windows**: 폴더의 **`run-app.bat` 더블클릭**
+- (또는 명령창에서) `python -m streamlit run app.py --server.address 0.0.0.0`
+- macOS/Linux: `bash run-app.sh`
+
+### 동료가 접속
+- 실행 화면에 뜨는 **`Network URL`**(예: http://172.30.1.81:8501)을 같은 망 동료가 브라우저에 입력.
+- 처음 실행 시 **Windows 방화벽 허용** 창 → **개인 네트워크 허용** 클릭.
+- 이 PC가 **켜져 있는 동안만** 접속 가능. 외부 인터넷에선 접속 불가(→ 기밀 측면 안전).
+
+> 항상 켜둘 공유용 PC가 있으면 그 PC에서 `run-app.bat`을 띄워두면 됩니다.
+> 사내망이라도 여러 명이 접속하므로 **`APP_PASSWORD` 설정을 권장**합니다.
 
 ## 4. 배포 후 운영 메모
 
