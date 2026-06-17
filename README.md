@@ -31,6 +31,7 @@ Phase 2  저장 + 검색    pgvector + 하이브리드 검색       → docs/pip
 Phase 3  활용           보고서 인용 / 입찰 매칭          → docs/pipeline-architecture.md
 ```
 
+**다른 PC에서 시작:** [SETUP.md](SETUP.md) (클론 → `pip install` → `.env` → `setup_check.py`)
 **문제 정의부터 가공까지 한눈에:** [docs/overview.md](docs/overview.md) (① 문제 정의 → ② 기존 데이터 검색 → ③ 법령 가져오기 → ④ 처리·저장·가공)
 
 전체 전략은 [STRATEGY.md](STRATEGY.md), 단계별 실행 계획은 [docs/roadmap.md](docs/roadmap.md) 참조.
@@ -100,4 +101,5 @@ python scripts/report.py "의료기기 제조업 허가는 누구에게 받나?"
 | `judge.py` | LLM 판정(Gemini): 조항이 주장을 실제 뒷받침/모순/무관인지 |
 | `report.py` | 근거 인용 답변 초안 (의미검색 + 환각 방지 / 버전 / HITL) |
 | `check.py` | 내 문서 ↔ 규정 정합성 점검표 (검색 + 인용검증 + LLM 판정) |
-| `bid_matrix.py` | 입찰 공고문 → 요구사항 매트릭스(유형·규정근거 매핑, M3) |
+| `bid_matrix.py` | 입찰 공고문 → 요구사항 매트릭스(유형·규정근거 매핑·충족판정, M3) |
+| `setup_check.py` | 다른 PC 셋업 점검(.env·Supabase·Gemini·KB·IP) |
