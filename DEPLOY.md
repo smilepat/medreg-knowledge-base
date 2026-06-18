@@ -17,6 +17,35 @@
 
 > 코드는 이미 클라우드 대응 완료: `retriever._load_env()`가 환경변수(Secrets)와 `.env`를 병합.
 
+## ★ 옵션 (선택됨) — Streamlit Community Cloud
+
+GitHub 레포를 그대로 연결해 배포. 무료, 코드 수정 없이 바로 가능(이미 대응 완료).
+
+### 단계 (클릭)
+1. **https://share.streamlit.io** 접속 → **GitHub 계정으로 로그인**
+2. 처음이면 **GitHub 권한 승인** — 이 레포가 **비공개**이므로 *private 저장소 접근* 허용 필요
+3. **Create app / Deploy a public app from GitHub** → 다음 입력:
+   - Repository: `smilepat/medreg-knowledge-base`
+   - Branch: `main`
+   - Main file path: **`app.py`**
+   - (Advanced) Python version: **3.13** 권장
+4. **Advanced settings → Secrets** 에 아래를 **TOML 형식**으로 붙여넣기
+   (값은 본인 `.env`에서 복사 — 채팅·git에 올리지 말 것):
+   ```toml
+   SUPABASE_DB_URL = "postgresql://postgres.<ref>:<비번>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
+   GEMINI_API_KEY  = "<키>"
+   APP_PASSWORD    = "<강한 접속 비밀번호>"
+   ```
+5. **Deploy** → 빌드 완료되면 `https://<앱이름>.streamlit.app` 주소로 **어디서나 접속**(비밀번호 입력 후)
+
+### 주의
+- 앱 URL은 누구나 접근 가능 → **APP_PASSWORD는 반드시 강하게**.
+- 비밀키는 위 Secrets에만(코드가 자동으로 읽음). git엔 절대 X.
+- 코드 수정 후 GitHub에 push하면 **자동 재배포**됨.
+- 무료 플랜은 일정 시간 미사용 시 잠자기(첫 접속이 조금 느릴 수 있음).
+
+---
+
 ## 1. 옵션 A — Hugging Face Spaces (Streamlit SDK)
 
 가장 빠름. (단, HF = 새 외부 서비스 → 회사 정책 확인 후)

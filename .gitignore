@@ -30,3 +30,6 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# Streamlit 로컬 secrets(클라우드는 대시보드에서 설정)
+.streamlit/secrets.toml

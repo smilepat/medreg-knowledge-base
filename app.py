@@ -19,7 +19,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 
+import os  # noqa: E402
 import streamlit as st  # noqa: E402
+
+# Streamlit Cloud Secrets(.streamlit/secrets.toml 또는 대시보드)를 환경변수로 주입.
+# → retriever 등이 os.environ 에서 키를 읽는다(로컬 .env 와 동일 경로). retriever import 전에 실행.
+try:
+    for _k, _v in st.secrets.items():
+        os.environ.setdefault(_k, str(_v))
+except Exception:
+    pass
+
 import retriever  # noqa: E402
 import check as check_mod  # noqa: E402
 import bid_matrix as bm  # noqa: E402
